@@ -24,13 +24,22 @@ def home():
 @app.route("/chat", methods=["POST"])
 def chat():
     try:
-        data = request.get_json()
-print("DEBUG RAW DATA:", request.data)
-print("DEBUG PARSED JSON:", data)
+        # In raw data từ request
+        raw_data = request.data
+        print("=== RAW REQUEST DATA ===")
+        print(raw_data)
+
+        # Thử parse JSON
+        data = request.get_json(silent=True)
+        print("=== PARSED JSON ===")
+        print(data)
 
         # Kiểm tra dữ liệu hợp lệ
         if not data or "message" not in data:
-            return jsonify({"error": "Missing 'message' in request"}), 400
+            return jsonify({
+                "error": "Missing 'message' in request",
+                "raw": raw_data.decode("utf-8", errors="replace")
+            }), 400
 
         user_message = data["message"]
 
@@ -47,9 +56,9 @@ print("DEBUG PARSED JSON:", data)
         return jsonify({"reply": reply})
 
     except Exception as e:
-        # Trả lỗi chi tiết để dễ debug
-        return jsonify({"error": str(e)}), 500
+        import traceback
+        error_info = traceback.format_exc()
+        print("=== ERROR ===")
+        print(error_info)
+        return jsonify({"error": str(e), "trace": error_info}), 500
 
-if __name__ == "__main__":
-    # Chạy local
-    app.run(host="0.0.0.0", port=5000, debug=True)
