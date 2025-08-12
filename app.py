@@ -25,6 +25,8 @@ def home():
 def chat():
     try:
         data = request.get_json()
+print("DEBUG RAW DATA:", request.data)
+print("DEBUG PARSED JSON:", data)
 
         # Kiểm tra dữ liệu hợp lệ
         if not data or "message" not in data:
