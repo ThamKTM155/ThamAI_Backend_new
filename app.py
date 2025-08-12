@@ -1,49 +1,81 @@
+# app.py
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from dotenv import load_dotenv
-import os
 import openai
+import os
+import logging
 
-# Nạp biến môi trường từ file .env
-load_dotenv()
+# =========================
+# Cấu hình logging
+# =========================
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s [%(levelname)s] %(message)s'
+)
 
-# Lấy API key từ biến môi trường
-openai.api_key = os.getenv("OPENAI_API_KEY")
-
+# =========================
+# Khởi tạo Flask
+# =========================
 app = Flask(__name__)
+app.config['JSON_AS_ASCII'] = False  # Trả JSON tiếng Việt chuẩn UTF-8
 
-# Mở toàn quyền CORS (mọi domain đều truy cập được)
+# =========================
+# Cấu hình CORS cho frontend
+# =========================
+# Cho phép mọi domain truy cập (hoặc giới hạn domain của anh)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Route kiểm tra backend sống
+# =========================
+# API Key OpenAI
+# =========================
+openai.api_key = os.getenv("OPENAI_API_KEY")
+if not openai.api_key:
+    logging.error("⚠️ Thiếu biến môi trường OPENAI_API_KEY")
+    raise RuntimeError("Thiếu OPENAI_API_KEY, hãy cấu hình trong Render hoặc file .env")
+
+# =========================
+# Route kiểm tra server
+# =========================
 @app.route("/", methods=["GET"])
 def home():
-    return jsonify({"message": "✅ ThamAI backend is running."})
+    return jsonify({
+        "status": "Backend is running",
+        "service": "ThamAI",
+        "version": "1.0.0"
+    }), 200
 
+# =========================
 # Route xử lý chat
+# =========================
 @app.route("/chat", methods=["POST"])
 def chat():
     try:
-        # In raw data từ request
-        raw_data = request.data
-        print("=== RAW REQUEST DATA ===")
-        print(raw_data)
+        # Lấy raw data để debug
+        raw_data = request.data.decode("utf-8", errors="replace")
+        logging.debug(f"📥 Raw request body: {raw_data}")
 
-        # Thử parse JSON
-        data = request.get_json(silent=True)
-        print("=== PARSED JSON ===")
-        print(data)
+        # Parse JSON
+        data = request.get_json(force=True, silent=True)
+        logging.debug(f"📦 Parsed JSON: {data}")
 
-        # Kiểm tra dữ liệu hợp lệ
+        # Kiểm tra dữ liệu
         if not data or "message" not in data:
+            logging.warning("❌ Thiếu 'message' trong request")
             return jsonify({
                 "error": "Missing 'message' in request",
-                "raw": raw_data.decode("utf-8", errors="replace")
+                "raw": raw_data
             }), 400
 
-        user_message = data["message"]
+        user_message = str(data["message"]).strip()
+        logging.info(f"💬 User: {user_message}")
 
-        # Gọi API OpenAI
+        if not user_message:
+            return jsonify({"error": "'message' is empty"}), 400
+
+        # =========================
+        # Gọi OpenAI
+        # =========================
+        logging.debug("⏳ Đang gọi API OpenAI...")
         response = openai.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
@@ -53,12 +85,18 @@ def chat():
         )
 
         reply = response.choices[0].message.content.strip()
-        return jsonify({"reply": reply})
+        logging.info(f"🤖 AI: {reply}")
+
+        return jsonify({"reply": reply}), 200
 
     except Exception as e:
-        import traceback
-        error_info = traceback.format_exc()
-        print("=== ERROR ===")
-        print(error_info)
-        return jsonify({"error": str(e), "trace": error_info}), 500
+        logging.exception("💥 Lỗi khi xử lý /chat")
+        return jsonify({"error": str(e)}), 500
 
+# =========================
+# Main entry (local)
+# =========================
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    logging.info(f"🚀 Server running on http://0.0.0.0:{port}")
+    app.run(host="0.0.0.0", port=port, debug=True)
