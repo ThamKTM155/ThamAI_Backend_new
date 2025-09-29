@@ -1,73 +1,50 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import logging
-import openai
 import os
+import json
+from datetime import datetime
 
-# ==========================
-# Cấu hình Flask
-# ==========================
 app = Flask(__name__)
-app.config['JSON_AS_ASCII'] = False  # Đảm bảo trả về JSON UTF-8
-CORS(app, resources={r"/*": {"origins": "*"}})  # Cho phép mọi domain truy cập
+CORS(app)
 
-# ==========================
-# Cấu hình Logging
-# ==========================
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s] %(message)s")
+LOG_FILE = "conversation_logs.json"
 
-# ==========================
-# Cấu hình OpenAI API key
-# ==========================
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# Hàm ghi log
+def save_log(role, message):
+    log_entry = {
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "role": role,
+        "message": message
+    }
+    if not os.path.exists(LOG_FILE):
+        with open(LOG_FILE, "w", encoding="utf-8") as f:
+            json.dump([], f, ensure_ascii=False, indent=2)
+    with open(LOG_FILE, "r+", encoding="utf-8") as f:
+        data = json.load(f)
+        data.append(log_entry)
+        f.seek(0)
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
-# ==========================
-# Route /chat
-# ==========================
+# Route chính (chat)
 @app.route("/chat", methods=["POST"])
 def chat():
-    # Log dữ liệu gốc mà client gửi
-    raw_data = request.get_data()
-    logging.debug(f"Raw request body: {raw_data}")
+    user_input = request.json.get("message", "")
+    save_log("user", user_input)
 
-    # Log header để xem encoding
-    logging.debug(f"Request headers: {dict(request.headers)}")
+    # Giả lập trả lời (test, chưa cần OpenAI API)
+    bot_reply = f"Bot đã nhận: {user_input}"
+    save_log("bot", bot_reply)
 
-    # Parse JSON
-    try:
-        data = request.get_json(force=True)
-    except Exception as e:
-        logging.error(f"JSON parse error: {e}")
-        return jsonify({"error": "Invalid JSON"}), 400
+    return jsonify({"reply": bot_reply})
 
-    if not data or "message" not in data:
-        return jsonify({"error": "Missing 'message' in request"}), 400
+# Route phụ lấy toàn bộ logs
+@app.route("/logs", methods=["GET"])
+def get_logs():
+    if not os.path.exists(LOG_FILE):
+        return jsonify([])
+    with open(LOG_FILE, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return jsonify(data)
 
-    user_message = data["message"]
-    logging.debug(f"User message parsed: {user_message}")
-
-    try:
-        # Gọi API OpenAI
-        response = openai.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "Bạn là ThamAI, trợ lý ảo thân thiện và hữu ích."},
-                {"role": "user", "content": user_message}
-            ]
-        )
-
-        reply = response.choices[0].message.content.strip()
-        logging.debug(f"Reply: {reply}")
-
-        return jsonify({"reply": reply})
-
-    except Exception as e:
-        logging.error(f"OpenAI API error: {e}")
-        return jsonify({"error": "Internal server error"}), 500
-
-
-# ==========================
-# Main
-# ==========================
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(debug=True)
