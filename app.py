@@ -1,50 +1,75 @@
+import os
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import os
-import json
+from dotenv import load_dotenv
 from datetime import datetime
+from openai import OpenAI
 
+# ==========================
+# Cấu hình
+# ==========================
+load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
-LOG_FILE = "conversation_logs.json"
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# Hàm ghi log
-def save_log(role, message):
-    log_entry = {
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "role": role,
-        "message": message
-    }
-    if not os.path.exists(LOG_FILE):
-        with open(LOG_FILE, "w", encoding="utf-8") as f:
-            json.dump([], f, ensure_ascii=False, indent=2)
-    with open(LOG_FILE, "r+", encoding="utf-8") as f:
-        data = json.load(f)
-        data.append(log_entry)
-        f.seek(0)
-        json.dump(data, f, ensure_ascii=False, indent=2)
+# Bộ nhớ logs hội thoại
+chat_logs = []
 
-# Route chính (chat)
+# ==========================
+# Route: Chat
+# ==========================
 @app.route("/chat", methods=["POST"])
 def chat():
-    user_input = request.json.get("message", "")
-    save_log("user", user_input)
+    try:
+        data = request.get_json()
+        user_message = data.get("message", "").strip()
 
-    # Giả lập trả lời (test, chưa cần OpenAI API)
-    bot_reply = f"Bot đã nhận: {user_input}"
-    save_log("bot", bot_reply)
+        if not user_message:
+            return jsonify({"reply": "⚠️ Bạn chưa nhập nội dung."})
 
-    return jsonify({"reply": bot_reply})
+        # Gọi OpenAI API
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "Bạn là ThamAI, trợ lý AI thân thiện, nói chuyện bằng tiếng Việt."},
+                {"role": "user", "content": user_message}
+            ]
+        )
 
-# Route phụ lấy toàn bộ logs
+        bot_reply = response.choices[0].message.content.strip()
+
+        # Lưu vào logs
+        chat_logs.append({
+            "user": user_message,
+            "bot": bot_reply,
+            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        })
+
+        return jsonify({"reply": bot_reply})
+
+    except Exception as e:
+        return jsonify({"reply": f"❌ Lỗi server: {str(e)}"})
+
+# ==========================
+# Route: Lấy lịch sử
+# ==========================
 @app.route("/logs", methods=["GET"])
 def get_logs():
-    if not os.path.exists(LOG_FILE):
-        return jsonify([])
-    with open(LOG_FILE, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    return jsonify(data)
+    return jsonify(chat_logs)
 
+# ==========================
+# Route: Xóa lịch sử
+# ==========================
+@app.route("/logs/clear", methods=["DELETE"])
+def clear_logs():
+    global chat_logs
+    chat_logs = []
+    return jsonify({"message": "🗑️ Lịch sử đã được xóa."})
+
+# ==========================
+# Run server
+# ==========================
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)
