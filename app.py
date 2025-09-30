@@ -1,4 +1,5 @@
 import os
+import logging, time, uuid
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -13,6 +14,37 @@ app = Flask(__name__)
 CORS(app)
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+# Cấu hình logger
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s"
+)
+logger = logging.getLogger("thamai")
+
+# Gắn request id và đo thời gian
+@app.before_request
+def _prep():
+    request._t = time.time()
+    request._rid = request.headers.get("X-Request-Id") or str(uuid.uuid4())
+
+@app.after_request
+def _access_log(resp):
+    dt = (time.time() - getattr(request, "_t", time.time()))*1000
+    logger.info(f"rid={request._rid} {request.method} {request.path} {resp.status_code} {dt:.1f}ms")
+    resp.headers["X-Request-Id"] = request._rid
+    return resp
+
+# Xử lý lỗi toàn cục
+@app.errorhandler(Exception)
+def _err(e):
+    logger.exception(f"rid={getattr(request,'_rid','-')} error: {e}")
+    return jsonify({"error":"internal_error","rid":getattr(request,'_rid','-')}), 500
+
+# Health check endpoint
+@app.get("/healthz")
+def health():
+    return jsonify({"status":"ok","version": "1.0.0"})
 
 # Bộ nhớ logs hội thoại
 chat_logs = []
