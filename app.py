@@ -1,13 +1,14 @@
-import os
-import logging, time, uuid
+import os, time, uuid, tempfile, subprocess, logging
+from datetime import datetime
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
-from datetime import datetime
 from openai import OpenAI
+import speech_recognition as sr
+from pydub import AudioSegment
 
 # ==========================
-# Cấu hình
+# Cấu hình chung
 # ==========================
 load_dotenv()
 app = Flask(__name__)
@@ -15,14 +16,15 @@ CORS(app)
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# Cấu hình logger
+# ==========================
+# Logging
+# ==========================
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(message)s"
 )
 logger = logging.getLogger("thamai")
 
-# Gắn request id và đo thời gian
 @app.before_request
 def _prep():
     request._t = time.time()
@@ -30,23 +32,26 @@ def _prep():
 
 @app.after_request
 def _access_log(resp):
-    dt = (time.time() - getattr(request, "_t", time.time()))*1000
+    dt = (time.time() - getattr(request, "_t", time.time())) * 1000
     logger.info(f"rid={request._rid} {request.method} {request.path} {resp.status_code} {dt:.1f}ms")
     resp.headers["X-Request-Id"] = request._rid
     return resp
 
-# Xử lý lỗi toàn cục
 @app.errorhandler(Exception)
 def _err(e):
-    logger.exception(f"rid={getattr(request,'_rid','-')} error: {e}")
-    return jsonify({"error":"internal_error","rid":getattr(request,'_rid','-')}), 500
+    logger.exception(f"rid={getattr(request, '_rid', '-')} error: {e}")
+    return jsonify({"error": "internal_error", "rid": getattr(request, '_rid', '-')}), 500
 
-# Health check endpoint
+# ==========================
+# Kiểm tra hệ thống
+# ==========================
 @app.get("/healthz")
 def health():
-    return jsonify({"status":"ok","version": "1.0.0"})
+    return jsonify({"status": "ok", "version": "1.0.0"})
 
-# Bộ nhớ logs hội thoại
+# ==========================
+# Bộ nhớ lưu hội thoại
+# ==========================
 chat_logs = []
 
 # ==========================
@@ -61,7 +66,6 @@ def chat():
         if not user_message:
             return jsonify({"reply": "⚠️ Bạn chưa nhập nội dung."})
 
-        # Gọi OpenAI API
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
@@ -71,8 +75,6 @@ def chat():
         )
 
         bot_reply = response.choices[0].message.content.strip()
-
-        # Lưu vào logs
         chat_logs.append({
             "user": user_message,
             "bot": bot_reply,
@@ -80,8 +82,8 @@ def chat():
         })
 
         return jsonify({"reply": bot_reply})
-
     except Exception as e:
+        logger.error(f"Lỗi trong /chat: {e}")
         return jsonify({"reply": f"❌ Lỗi server: {str(e)}"})
 
 # ==========================
@@ -99,6 +101,65 @@ def clear_logs():
     global chat_logs
     chat_logs = []
     return jsonify({"message": "🗑️ Lịch sử đã được xóa."})
+
+# ==========================
+# Route: Speech-to-Text
+# ==========================
+@app.route("/speech-to-text", methods=["POST"])
+def speech_to_text():
+    try:
+        if 'file' not in request.files:
+            return jsonify({"error": "Không có tệp audio gửi lên"}), 400
+
+        audio_file = request.files['file']
+
+        # Lưu file webm tạm
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as temp_webm:
+            audio_file.save(temp_webm.name)
+            temp_webm_path = temp_webm.name
+
+        # Chuyển sang wav (16kHz mono)
+        temp_wav_path = temp_webm_path.replace(".webm", ".wav")
+        try:
+            ffmpeg_cmd = ["ffmpeg", "-i", temp_webm_path, "-ar", "16000", "-ac", "1", temp_wav_path]
+            subprocess.run(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        except Exception as e:
+            print("⚠️ FFmpeg lỗi, fallback Google:", e)
+            sound = AudioSegment.from_file(temp_webm_path)
+            sound.export(temp_wav_path, format="wav")
+
+        # --- Ưu tiên Whisper ---
+        try:
+            with open(temp_wav_path, "rb") as f:
+                transcript = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=f,
+                    response_format="json"
+                )
+            text = transcript.text.strip() if hasattr(transcript, 'text') else transcript.get('text', '')
+            return jsonify({"text": text, "engine": "whisper"})
+        except Exception as e:
+            print("⚠️ Whisper lỗi, fallback Google:", e)
+
+        # --- Fallback Google SpeechRecognition ---
+        recognizer = sr.Recognizer()
+        with sr.AudioFile(temp_wav_path) as source:
+            audio_data = recognizer.record(source)
+        try:
+            text = recognizer.recognize_google(audio_data, language="vi-VN")
+            return jsonify({"text": text, "engine": "google"})
+        except sr.UnknownValueError:
+            return jsonify({"text": "", "engine": "google", "error": "Không nhận diện được"}), 200
+
+    except Exception as e:
+        logger.error(f"Lỗi trong /speech-to-text: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        try:
+            os.remove(temp_webm_path)
+            os.remove(temp_wav_path)
+        except:
+            pass
 
 # ==========================
 # Run server
