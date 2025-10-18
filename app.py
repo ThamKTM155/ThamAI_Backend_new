@@ -164,5 +164,34 @@ def speech_to_text():
 # ==========================
 # Run server
 # ==========================
+# ==========================
+# Route: Speech to Text
+# ==========================
+@app.route("/speech-to-text", methods=["POST"])
+def speech_to_text():
+    try:
+        if "file" not in request.files:
+            return jsonify({"error": "Thiếu file audio"}), 400
+
+        audio_file = request.files["file"]
+
+        # Lưu file tạm
+        temp_path = f"/tmp/{uuid.uuid4()}.webm"
+        audio_file.save(temp_path)
+
+        # Dùng Whisper để chuyển giọng nói thành văn bản
+        with open(temp_path, "rb") as f:
+            transcript = client.audio.transcriptions.create(
+                model="gpt-4o-mini-transcribe",  # Model mới, nhẹ và chính xác
+                file=f,
+                response_format="text"
+            )
+
+        os.remove(temp_path)
+        return jsonify({"text": transcript.strip()})
+
+    except Exception as e:
+        logger.exception(f"Lỗi khi xử lý giọng nói: {e}")
+        return jsonify({"error": str(e)}), 500
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
