@@ -1,86 +1,93 @@
+# =========================
+# 💬 Trợ lý ThamAI Backend (Flask + OpenAI)
+# =========================
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import requests
 import openai
-import os
-from dotenv import load_dotenv
+import base64
+import io
+from pathlib import Path
 
-# --- Tải biến môi trường ---
-load_dotenv()
-
-# --- Khởi tạo Flask app ---
 app = Flask(__name__)
 CORS(app)
 
-# --- API Keys ---
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-HF_API_KEY = os.getenv("HF_API_KEY")
-HF_API_URL = os.getenv("HF_API_URL", "https://api-inference.huggingface.co/models/openai/whisper-tiny")
-
-openai.api_key = OPENAI_API_KEY
+# --- Cấu hình API key ---
+import os
+from dotenv import load_dotenv
+load_dotenv()
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # --- Route kiểm tra kết nối ---
 @app.route('/test', methods=['GET'])
 def test_connection():
-    return jsonify({"message": "Kết nối backend thành công!", "status": "ok"}), 200
+    return jsonify({"message": "✅ Kết nối backend ThamAI thành công!", "status": "ok"}), 200
 
 
-# --- Route CHAT (văn bản) ---
+# --- Route trò chuyện chính ---
 @app.route('/chat', methods=['POST'])
 def chat():
+    data = request.get_json()
+    message = data.get("message", "")
+
+    if not message:
+        return jsonify({"error": "❌ Không nhận được tin nhắn."}), 400
+
     try:
-        data = request.get_json()
-        message = data.get("message", "")
-
-        if not message:
-            return jsonify({"error": "Không có nội dung message gửi lên!"}), 400
-
-        # Gọi OpenAI API (nếu còn quota)
-        response = openai.ChatCompletion.create(
+        response = openai.chat.completions.create(
             model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "Bạn là trợ lý thân thiện tên ThắmAI."},
-                {"role": "user", "content": message}
-            ]
+            messages=[{"role": "user", "content": message}]
         )
-
-        reply = response.choices[0].message['content']
-        return jsonify({"reply": reply}), 200
-
+        reply = response.choices[0].message.content
+        return jsonify({"reply": reply})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"Lỗi xử lý chat: {str(e)}"}), 500
 
 
-# --- Route SPEECH TO TEXT (giọng nói -> chữ) ---
-@app.route('/speech-to-text', methods=['POST'])
-def speech_to_text():
+# --- Route TTS: Text -> Giọng nói ---
+@app.route('/speak', methods=['POST'])
+def speak():
+    data = request.get_json()
+    text = data.get("text", "")
+
+    if not text:
+        return jsonify({"error": "Không có nội dung để đọc."}), 400
+
     try:
-        if 'audio' not in request.files:
-            return jsonify({"error": "Không tìm thấy tệp âm thanh!"}), 400
-
-        audio_file = request.files['audio']
-
-        headers = {"Authorization": f"Bearer {HF_API_KEY}"}
-        response = requests.post(
-            HF_API_URL,
-            headers=headers,
-            data=audio_file.read()
+        # Sử dụng model TTS của OpenAI
+        tts_response = openai.audio.speech.create(
+            model="gpt-4o-mini-tts",
+            voice="alloy",   # alloy / verse / coral / sage
+            input=text
         )
 
-        if response.status_code != 200:
-            return jsonify({
-                "error": f"Lỗi Whisper HuggingFace: {response.status_code}",
-                "details": response.text
-            }), response.status_code
+        audio_bytes = tts_response.read()
+        audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
 
-        result = response.json()
-        text = result.get("text", "(Không nhận dạng được giọng nói)")
-        return jsonify({"text": text}), 200
-
+        return jsonify({"audio": audio_base64})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"Lỗi TTS: {str(e)}"}), 500
 
 
-# --- Chạy app ---
+# --- Route Whisper: Ghi âm -> Văn bản ---
+@app.route('/whisper', methods=['POST'])
+def whisper():
+    if 'audio' not in request.files:
+        return jsonify({"error": "Không có file ghi âm gửi lên."}), 400
+
+    audio_file = request.files['audio']
+
+    try:
+        # Whisper API - tự động nhận dạng tiếng Việt
+        transcript = openai.audio.transcriptions.create(
+            model="whisper-1",
+            file=audio_file
+        )
+        return jsonify({"text": transcript.text})
+    except Exception as e:
+        return jsonify({"error": f"Lỗi Whisper: {str(e)}"}), 500
+
+
+# --- Chạy ứng dụng ---
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host="0.0.0.0", port=5000)
