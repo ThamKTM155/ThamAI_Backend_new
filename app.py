@@ -1,91 +1,145 @@
+import os
+import logging, time, uuid
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import requests
-import openai
-import os
 from dotenv import load_dotenv
+from datetime import datetime
+from openai import OpenAI
+import requests
 
-# ----------------------------
-# 1️⃣ Nạp biến môi trường
-# ----------------------------
+# ==========================
+# Cấu hình
+# ==========================
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
-
-HF_API_URL = os.getenv("HF_API_URL")
-HF_API_KEY = os.getenv("HF_API_KEY")
-
-# ----------------------------
-# 2️⃣ Khởi tạo Flask app
-# ----------------------------
 app = Flask(__name__)
 CORS(app)
 
-# ----------------------------
-# 3️⃣ API Chat (Text)
-# ----------------------------
-@app.route('/chat', methods=['POST'])
-def chat():
-    try:
-        data = request.get_json()
-        user_message = data.get("message", "")
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+HF_API_URL = os.getenv("HF_API_URL")
+HF_API_KEY = os.getenv("HF_API_KEY")
 
-        if not user_message:
-            return jsonify({"error": "Thiếu nội dung tin nhắn"}), 400
+logging.basicConfig(level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger("thamai")
 
-        # Gọi OpenAI Chat Completion
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": user_message}]
-        )
+# ==========================
+# Trước & Sau mỗi request
+# ==========================
+@app.before_request
+def _prep():
+    request._t = time.time()
+    request._rid = request.headers.get("X-Request-Id") or str(uuid.uuid4())
 
-        reply = response["choices"][0]["message"]["content"]
-        return jsonify({"reply": reply})
+@app.after_request
+def _access_log(resp):
+    dt = (time.time() - getattr(request, "_t", time.time())) * 1000
+    logger.info(f"rid={request._rid} {request.method} {request.path} {resp.status_code} {dt:.1f}ms")
+    resp.headers["X-Request-Id"] = request._rid
+    return resp
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+@app.errorhandler(Exception)
+def _err(e):
+    logger.exception(f"rid={getattr(request,'_rid','-')} error: {e}")
+    return jsonify({"error": "lỗi_nội_bộ", "rid": getattr(request,'_rid','-')}), 500
 
-# ----------------------------
-# 4️⃣ API Speech-to-Text (Whisper qua Hugging Face)
-# ----------------------------
-@app.route('/speech-to-text', methods=['POST'])
-def speech_to_text():
-    try:
-        if 'audio' not in request.files:
-            return jsonify({"error": "Không có file audio"}), 400
-
-        audio_file = request.files['audio']
-        audio_bytes = audio_file.read()
-
-        headers = {"Authorization": f"Bearer {HF_API_KEY}"}
-        response = requests.post(HF_API_URL, headers=headers, data=audio_bytes)
-
-        if response.status_code != 200:
-            return jsonify({"error": f"Lỗi Hugging Face: {response.text}"}), response.status_code
-
-        result = response.json()
-
-        # Hugging Face Whisper trả về text khác nhau tuỳ model
-        if isinstance(result, list) and len(result) > 0 and "text" in result[0]:
-            text = result[0]["text"]
-        elif "text" in result:
-            text = result["text"]
-        else:
-            text = "Không nhận diện được âm thanh."
-
-        return jsonify({"text": text})
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# ----------------------------
-# 5️⃣ Khởi chạy cục bộ
-# ----------------------------
-@app.route('/')
+# ==========================
+# Health check
+# ==========================
+@app.route("/")
 def home():
     return "✅ ThamAI Backend is running properly on Render!"
 
-@app.route('/test')
+@app.route("/test")
 def test():
     return jsonify({"status": "ok", "message": "Backend connection successful!"})
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+
+# ==========================
+# Bộ nhớ tạm hội thoại
+# ==========================
+chat_logs = []
+
+# ==========================
+# Route: Chat
+# ==========================
+@app.route("/chat", methods=["POST"])
+def chat():
+    data = request.get_json()
+    user_message = data.get("message", "").strip()
+    if not user_message:
+        return jsonify({"reply": "⚠️ Bạn chưa nhập nội dung."})
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "Bạn là ThamAI – trợ lý thân thiện nói tiếng Việt, giọng vui vẻ, tự nhiên."},
+            {"role": "user", "content": user_message}
+        ]
+    )
+    bot_reply = response.choices[0].message.content.strip()
+    chat_logs.append({
+        "user": user_message,
+        "bot": bot_reply,
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    })
+    return jsonify({"reply": bot_reply})
+
+# ==========================
+# Route: Speech-to-Text (Whisper)
+# ==========================
+@app.route("/speech-to-text", methods=["POST"])
+def speech_to_text():
+    if "audio" not in request.files:
+        return jsonify({"error": "Thiếu tệp âm thanh"}), 400
+
+    audio_file = request.files["audio"]
+
+    try:
+        headers = {"Authorization": f"Bearer {HF_API_KEY}"}
+        resp = requests.post(HF_API_URL, headers=headers, data=audio_file.read())
+        text = resp.text
+        return jsonify({"text": text})
+    except Exception as e:
+        logger.exception("Speech-to-text error")
+        return jsonify({"error": str(e)}), 500
+
+# ==========================
+# Route: Text-to-Speech (OpenAI TTS)
+# ==========================
+@app.route("/text-to-speech", methods=["POST"])
+def text_to_speech():
+    data = request.get_json()
+    text = data.get("text", "")
+    if not text:
+        return jsonify({"error": "Không có nội dung văn bản."}), 400
+
+    try:
+        speech_file = f"speech_{uuid.uuid4().hex}.mp3"
+        with client.audio.speech.with_streaming_response.create(
+            model="gpt-4o-mini-tts",
+            voice="alloy",
+            input=text
+        ) as response:
+            response.stream_to_file(speech_file)
+        return jsonify({"audio_url": f"/static/{speech_file}"})
+    except Exception as e:
+        logger.exception("TTS error")
+        return jsonify({"error": str(e)}), 500
+
+# ==========================
+# Route: Lịch sử chat
+# ==========================
+@app.route("/logs", methods=["GET"])
+def get_logs():
+    return jsonify(chat_logs)
+
+@app.route("/logs/clear", methods=["DELETE"])
+def clear_logs():
+    global chat_logs
+    chat_logs = []
+    return jsonify({"message": "🗑️ Lịch sử đã được xóa."})
+
+# ==========================
+# Run server
+# ==========================
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)
