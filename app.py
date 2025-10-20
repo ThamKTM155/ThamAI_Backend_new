@@ -80,5 +80,12 @@ def speech_to_text():
 # ----------------------------
 # 5️⃣ Khởi chạy cục bộ
 # ----------------------------
+@app.route('/')
+def home():
+    return "✅ ThamAI Backend is running properly on Render!"
+
+@app.route('/test')
+def test():
+    return jsonify({"status": "ok", "message": "Backend connection successful!"})
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
