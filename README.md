@@ -42,7 +42,7 @@ Khi test nội bộ, API Whisper miễn phí có thể hơi chậm vài giây.
 
 🧠 Cài đặt và chạy thử cục bộ
 
-Mở Terminal trong thư mục ThamAI_Backend_clean
+Mở Terminal trong thư mục ThamAI_Backend_new
 
 Cài thư viện cần thiết:
 
