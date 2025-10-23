@@ -67,6 +67,28 @@ def chat():
         print("❌ Lỗi /chat:", e)
         return jsonify({"error": str(e)}), 500
 
+# -------------------------
+# Route: Nhận giọng nói → Chuyển thành văn bản (Speech-to-Text)
+# -------------------------
+@app.route('/whisper', methods=['POST'])
+def whisper():
+    try:
+        audio_file = request.files.get("audio")
+        if not audio_file:
+            return jsonify({"error": "Thiếu file ghi âm"}), 400
+
+        # Gửi lên OpenAI Whisper API
+        transcript = client.audio.transcriptions.create(
+            model="gpt-4o-mini-transcribe",
+            file=audio_file
+        )
+
+        text = transcript.text.strip()
+        return jsonify({"text": text})
+
+    except Exception as e:
+        print("❌ Lỗi /whisper:", e)
+        return jsonify({"error": str(e)}), 500
 
 # -------------------------
 # Route: Chuyển văn bản → giọng nói (Text → Speech)
