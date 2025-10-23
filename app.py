@@ -23,7 +23,6 @@ if not OPENAI_API_KEY:
     print("⚠️ Cảnh báo: Chưa có API Key trong .env")
 client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
-
 # -------------------------
 # Route: Kiểm tra kết nối
 # -------------------------
@@ -33,7 +32,6 @@ def test_connection():
         "message": "✅ Kết nối backend ThamAI thành công!",
         "status": "ok"
     }), 200
-
 
 # -------------------------
 # Route: Chat (Văn bản ↔ Văn bản)
@@ -49,13 +47,10 @@ def chat():
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "Bạn là trợ lý thân thiện tên ThamAI, nói năng nhẹ nhàng, vui vẻ, "
-                        "có thể trả lời bằng giọng Nam hoặc Nữ tùy yêu cầu người dùng."
-                    )
-                },
+                {"role": "system", "content": (
+                    "Bạn là trợ lý thân thiện tên ThamAI, nói năng nhẹ nhàng, vui vẻ, "
+                    "có thể trả lời bằng giọng Nam hoặc Nữ tùy yêu cầu người dùng."
+                )},
                 {"role": "user", "content": message}
             ]
         )
@@ -67,58 +62,9 @@ def chat():
         print("❌ Lỗi /chat:", e)
         return jsonify({"error": str(e)}), 500
 
-# -------------------------
-# Route: Nhận giọng nói → Chuyển thành văn bản (Speech-to-Text)
-# -------------------------
-@app.route('/whisper', methods=['POST'])
-def whisper():
-    try:
-        audio_file = request.files.get("audio")
-        if not audio_file:
-            return jsonify({"error": "Thiếu file ghi âm"}), 400
-
-        # Gửi lên OpenAI Whisper API
-        transcript = client.audio.transcriptions.create(
-            model="gpt-4o-mini-transcribe",
-            file=audio_file
-        )
-
-        text = transcript.text.strip()
-        return jsonify({"text": text})
-
-    except Exception as e:
-        print("❌ Lỗi /whisper:", e)
-        return jsonify({"error": str(e)}), 500
 
 # -------------------------
-# Route: Chuyển văn bản → giọng nói (Text → Speech)
-# -------------------------
-@app.route('/speak', methods=['POST'])
-def speak():
-    try:
-        data = request.get_json()
-        text = data.get("text", "")
-        if not text:
-            return jsonify({"error": "Thiếu nội dung văn bản"}), 400
-
-        # ✅ Tạo file âm thanh tạm
-        with client.audio.speech.with_streaming_response.create(
-            model="gpt-4o-mini-tts",
-            voice="alloy",  # có thể đổi: alloy / verse / nova
-            input=text
-        ) as response:
-            tmp = NamedTemporaryFile(delete=False, suffix=".mp3")
-            response.stream_to_file(tmp.name)
-            tmp.flush()
-            return send_file(tmp.name, mimetype="audio/mpeg")
-
-    except Exception as e:
-        print("❌ Lỗi /speak:", e)
-        return jsonify({"error": str(e)}), 500
-
-
-# -------------------------
-# Route: Chuyển giọng nói → văn bản (Speech → Text)
+# Route: Nhận giọng nói → Văn bản (Speech-to-Text)
 # -------------------------
 @app.route('/whisper', methods=['POST'])
 def whisper():
@@ -127,7 +73,7 @@ def whisper():
             return jsonify({"error": "Không có tệp âm thanh được gửi"}), 400
 
         audio_file = request.files['file']
-        audio_bytes = audio_file.read()  # ✅ Đọc dữ liệu thành bytes
+        audio_bytes = audio_file.read()
 
         response = client.audio.transcriptions.create(
             model="gpt-4o-mini-transcribe",
@@ -138,6 +84,35 @@ def whisper():
 
     except Exception as e:
         print("❌ Lỗi /whisper:", e)
+        return jsonify({"error": str(e)}), 500
+
+
+# -------------------------
+# Route: Chuyển văn bản → Giọng nói (Text-to-Speech)
+# -------------------------
+@app.route('/speak', methods=['POST'])
+def speak():
+    try:
+        data = request.get_json()
+        text = data.get("text", "")
+        if not text:
+            return jsonify({"error": "Thiếu nội dung văn bản"}), 400
+
+        # ✅ Dùng OpenAI TTS
+        speech = client.audio.speech.create(
+            model="gpt-4o-mini-tts",
+            voice="alloy",
+            input=text
+        )
+
+        tmp = NamedTemporaryFile(delete=False, suffix=".mp3")
+        speech.stream_to_file(tmp.name)
+        tmp.flush()
+
+        return send_file(tmp.name, mimetype="audio/mpeg")
+
+    except Exception as e:
+        print("❌ Lỗi /speak:", e)
         return jsonify({"error": str(e)}), 500
 
 
