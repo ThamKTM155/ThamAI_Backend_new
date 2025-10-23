@@ -7,7 +7,7 @@
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from dotenv import load_dotenv
-import openai, os, io, base64
+import openai, os
 from tempfile import NamedTemporaryFile
 
 # --- Nạp biến môi trường ---
@@ -23,6 +23,7 @@ if not OPENAI_API_KEY:
     print("⚠️ Cảnh báo: Chưa có API Key trong .env")
 client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
+
 # -------------------------
 # Route: Kiểm tra kết nối
 # -------------------------
@@ -32,6 +33,7 @@ def test_connection():
         "message": "✅ Kết nối backend ThamAI thành công!",
         "status": "ok"
     }), 200
+
 
 # -------------------------
 # Route: Chat (Văn bản ↔ Văn bản)
@@ -44,11 +46,16 @@ def chat():
         if not message:
             return jsonify({"error": "Thiếu nội dung tin nhắn"}), 400
 
-        # Gọi OpenAI GPT
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "Bạn là trợ lý thân thiện ThamAI, nói năng lịch sự và ngắn gọn."},
+                {
+                    "role": "system",
+                    "content": (
+                        "Bạn là trợ lý thân thiện tên ThamAI, nói năng nhẹ nhàng, vui vẻ, "
+                        "có thể trả lời bằng giọng Nam hoặc Nữ tùy yêu cầu người dùng."
+                    )
+                },
                 {"role": "user", "content": message}
             ]
         )
@@ -62,7 +69,7 @@ def chat():
 
 
 # -------------------------
-# Route: Chuyển văn bản thành giọng nói (Text → Speech)
+# Route: Chuyển văn bản → giọng nói (Text → Speech)
 # -------------------------
 @app.route('/speak', methods=['POST'])
 def speak():
@@ -75,7 +82,7 @@ def speak():
         # Gọi OpenAI TTS (Text-to-Speech)
         speech = client.audio.speech.create(
             model="gpt-4o-mini-tts",
-            voice="alloy",  # giọng mặc định, có thể thay bằng "verse", "soft", "vivid"
+            voice="nova",  # ✅ Giọng nữ mềm mại tự nhiên
             input=text
         )
 
@@ -91,7 +98,7 @@ def speak():
 
 
 # -------------------------
-# Route: Chuyển giọng nói thành văn bản (Speech → Text)
+# Route: Chuyển giọng nói → văn bản (Speech → Text)
 # -------------------------
 @app.route('/whisper', methods=['POST'])
 def whisper():
@@ -101,7 +108,6 @@ def whisper():
 
         audio_file = request.files['audio']
 
-        # Nhận diện giọng nói bằng Whisper
         transcript = client.audio.transcriptions.create(
             model="gpt-4o-mini-transcribe",
             file=audio_file
