@@ -79,15 +79,13 @@ def speak():
         if not text:
             return jsonify({"error": "Thiếu nội dung văn bản"}), 400
 
-        # Gọi OpenAI TTS (Text-to-Speech)
-        response = client.audio.speech.create(
+        # ✅ Dùng phương thức streaming response mới
+        with client.audio.speech.with_streaming_response.create(
             model="gpt-4o-mini-tts",
-            voice="nova",  # ✅ Giọng nữ mềm mại tự nhiên
+            voice="alloy",  # có thể đổi sang "verse", "nova" nếu muốn
             input=text
-        )
-
-        # Ghi file tạm và phát lại
-        with NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+        ) as response:
+            tmp = NamedTemporaryFile(delete=False, suffix=".mp3")
             response.stream_to_file(tmp.name)
             tmp.flush()
             return send_file(tmp.name, mimetype="audio/mpeg")
@@ -95,6 +93,7 @@ def speak():
     except Exception as e:
         print("❌ Lỗi /speak:", e)
         return jsonify({"error": str(e)}), 500
+
 # -------------------------
 # Chạy local (tùy chọn)
 # -------------------------
