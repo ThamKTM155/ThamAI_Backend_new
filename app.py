@@ -1,123 +1,114 @@
-# =========================================
-# 🎯 ThamAI Backend - Flask Server
-# Phiên bản: 2025-10
-# Mục tiêu: Chat + Text-to-Speech + Speech-to-Text
-# =========================================
-
-from flask import Flask, request, jsonify, send_file
+import os
+from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 from dotenv import load_dotenv
-import openai, os
-from tempfile import NamedTemporaryFile
+from openai import OpenAI
 
-# --- Nạp biến môi trường ---
+# -------------------------
+# ⚙️ Cấu hình Flask + OpenAI
+# -------------------------
+app = Flask(__name__)
+CORS(app)
 load_dotenv()
 
-# --- Khởi tạo Flask ---
-app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
-
-# --- API Key OpenAI ---
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-if not OPENAI_API_KEY:
-    print("⚠️ Cảnh báo: Chưa có API Key trong .env")
-client = openai.OpenAI(api_key=OPENAI_API_KEY)
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # -------------------------
-# Route: Kiểm tra kết nối
+# 🧭 Route gốc (kiểm tra kết nối)
 # -------------------------
-@app.route('/test', methods=['GET'])
-def test_connection():
+@app.route("/", methods=["GET"])
+@app.route("/test", methods=["GET"])
+def home():
     return jsonify({
         "message": "✅ Kết nối backend ThamAI thành công!",
         "status": "ok"
-    }), 200
+    })
 
 # -------------------------
-# Route: Chat (Văn bản ↔ Văn bản)
+# 💬 1️⃣ ChatGPT - Xử lý hội thoại
 # -------------------------
-@app.route('/chat', methods=['POST'])
+@app.route("/chat", methods=["POST"])
 def chat():
     try:
         data = request.get_json()
-        message = data.get("message", "").strip()
-        if not message:
-            return jsonify({"error": "Thiếu nội dung tin nhắn"}), 400
+        user_message = data.get("message", "").strip()
+        if not user_message:
+            return jsonify({"error": "Tin nhắn trống."}), 400
 
-        response = client.chat.completions.create(
+        completion = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": (
-                    "Bạn là trợ lý thân thiện tên ThamAI, nói năng nhẹ nhàng, vui vẻ, "
-                    "có thể trả lời bằng giọng Nam hoặc Nữ tùy yêu cầu người dùng."
-                )},
-                {"role": "user", "content": message}
+                {"role": "system", "content": "Bạn là ThamAI - trợ lý ảo thân thiện, giọng nam miền Nam, nói chuyện vui vẻ, lịch sự và dễ hiểu."},
+                {"role": "user", "content": user_message}
             ]
         )
-
-        reply = response.choices[0].message.content
+        reply = completion.choices[0].message.content
         return jsonify({"reply": reply})
 
     except Exception as e:
-        print("❌ Lỗi /chat:", e)
+        print("❌ Lỗi chat:", e)
         return jsonify({"error": str(e)}), 500
 
-
 # -------------------------
-# Route: Nhận giọng nói → Văn bản (Speech-to-Text)
+# 🎙️ 2️⃣ Whisper - Ghi âm → Văn bản
 # -------------------------
-@app.route('/whisper', methods=['POST'])
-def whisper():
+@app.route("/whisper", methods=["POST"])
+def whisper_transcribe():
     try:
-        if 'file' not in request.files:
-            return jsonify({"error": "Không có tệp âm thanh được gửi"}), 400
+        if "file" not in request.files:
+            return jsonify({"error": "Không có file ghi âm."}), 400
 
-        audio_file = request.files['file']
-        audio_bytes = audio_file.read()
+        audio_file = request.files["file"]
+        if audio_file.filename == "":
+            return jsonify({"error": "File rỗng."}), 400
 
-        response = client.audio.transcriptions.create(
-            model="gpt-4o-mini-transcribe",
-            file=("audio.wav", audio_bytes)
-        )
+        # ✅ Lưu file tạm để gửi cho OpenAI
+        temp_path = "temp_input.webm"
+        audio_file.save(temp_path)
 
-        return jsonify({"text": response.text})
+        print(f"📥 Nhận file ghi âm: {audio_file.filename}, loại: {audio_file.content_type}")
+
+        with open(temp_path, "rb") as f:
+            transcript = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=f
+            )
+
+        os.remove(temp_path)
+        return jsonify({"text": transcript.text})
 
     except Exception as e:
-        print("❌ Lỗi /whisper:", e)
+        print("❌ Lỗi Whisper:", e)
         return jsonify({"error": str(e)}), 500
 
-
 # -------------------------
-# Route: Chuyển văn bản → Giọng nói (Text-to-Speech)
+# 🔊 3️⃣ TTS - Văn bản → Giọng nói
 # -------------------------
-@app.route('/speak', methods=['POST'])
+@app.route("/speak", methods=["POST"])
 def speak():
     try:
         data = request.get_json()
-        text = data.get("text", "")
-        if not text:
-            return jsonify({"error": "Thiếu nội dung văn bản"}), 400
+        text = data.get("text", "").strip()
 
-        # ✅ Dùng OpenAI TTS
+        if not text:
+            return jsonify({"error": "Không có nội dung để đọc."}), 400
+
+        print(f"🔊 Tạo giọng nói cho đoạn: {text[:50]}...")
+
         speech = client.audio.speech.create(
             model="gpt-4o-mini-tts",
             voice="alloy",
             input=text
         )
 
-        tmp = NamedTemporaryFile(delete=False, suffix=".mp3")
-        speech.stream_to_file(tmp.name)
-        tmp.flush()
-
-        return send_file(tmp.name, mimetype="audio/mpeg")
+        return Response(speech.read(), mimetype="audio/mpeg")
 
     except Exception as e:
-        print("❌ Lỗi /speak:", e)
+        print("❌ Lỗi tạo giọng nói:", e)
         return jsonify({"error": str(e)}), 500
 
-
 # -------------------------
-# Chạy local (tùy chọn)
+# 🚀 Khởi chạy Flask (local)
 # -------------------------
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)
