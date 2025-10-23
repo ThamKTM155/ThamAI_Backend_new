@@ -98,28 +98,32 @@ def speak():
 
 
 # -------------------------
-# Route: Chuyển giọng nói → văn bản (Speech → Text)
+# Route: Chuyển văn bản → giọng nói (Text → Speech)
 # -------------------------
-@app.route('/whisper', methods=['POST'])
-def whisper():
+@app.route('/speak', methods=['POST'])
+def speak():
     try:
-        if 'audio' not in request.files:
-            return jsonify({"error": "Không tìm thấy file âm thanh"}), 400
+        data = request.get_json()
+        text = data.get("text", "")
+        if not text:
+            return jsonify({"error": "Thiếu nội dung văn bản"}), 400
 
-        audio_file = request.files['audio']
-
-        transcript = client.audio.transcriptions.create(
-            model="gpt-4o-mini-transcribe",
-            file=audio_file
+        # Gọi OpenAI TTS (Text-to-Speech)
+        response = client.audio.speech.create(
+            model="gpt-4o-mini-tts",
+            voice="nova",  # ✅ Giọng nữ mềm mại tự nhiên
+            input=text
         )
 
-        return jsonify({"text": transcript.text})
+        # Ghi file tạm và phát lại
+        with NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+            response.stream_to_file(tmp.name)
+            tmp.flush()
+            return send_file(tmp.name, mimetype="audio/mpeg")
 
     except Exception as e:
-        print("❌ Lỗi /whisper:", e)
+        print("❌ Lỗi /speak:", e)
         return jsonify({"error": str(e)}), 500
-
-
 # -------------------------
 # Chạy local (tùy chọn)
 # -------------------------
