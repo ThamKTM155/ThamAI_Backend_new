@@ -80,35 +80,6 @@ def speak():
             return jsonify({"error": "Thiếu nội dung văn bản"}), 400
 
         # Gọi OpenAI TTS (Text-to-Speech)
-        speech = client.audio.speech.create(
-            model="gpt-4o-mini-tts",
-            voice="nova",  # ✅ Giọng nữ mềm mại tự nhiên
-            input=text
-        )
-
-        # Ghi file tạm và trả về
-        with NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
-            tmp.write(speech.read())
-            tmp.flush()
-            return send_file(tmp.name, mimetype="audio/mpeg")
-
-    except Exception as e:
-        print("❌ Lỗi /speak:", e)
-        return jsonify({"error": str(e)}), 500
-
-
-# -------------------------
-# Route: Chuyển văn bản → giọng nói (Text → Speech)
-# -------------------------
-@app.route('/speak', methods=['POST'])
-def speak():
-    try:
-        data = request.get_json()
-        text = data.get("text", "")
-        if not text:
-            return jsonify({"error": "Thiếu nội dung văn bản"}), 400
-
-        # Gọi OpenAI TTS (Text-to-Speech)
         response = client.audio.speech.create(
             model="gpt-4o-mini-tts",
             voice="nova",  # ✅ Giọng nữ mềm mại tự nhiên
