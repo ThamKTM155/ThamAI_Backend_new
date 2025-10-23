@@ -79,10 +79,10 @@ def speak():
         if not text:
             return jsonify({"error": "Thiếu nội dung văn bản"}), 400
 
-        # ✅ Dùng phương thức streaming response mới
+        # ✅ Tạo file âm thanh tạm
         with client.audio.speech.with_streaming_response.create(
             model="gpt-4o-mini-tts",
-            voice="alloy",  # có thể đổi sang "verse", "nova" nếu muốn
+            voice="alloy",  # có thể đổi: alloy / verse / nova
             input=text
         ) as response:
             tmp = NamedTemporaryFile(delete=False, suffix=".mp3")
@@ -93,6 +93,31 @@ def speak():
     except Exception as e:
         print("❌ Lỗi /speak:", e)
         return jsonify({"error": str(e)}), 500
+
+
+# -------------------------
+# Route: Chuyển giọng nói → văn bản (Speech → Text)
+# -------------------------
+@app.route('/whisper', methods=['POST'])
+def whisper():
+    try:
+        if 'file' not in request.files:
+            return jsonify({"error": "Không có tệp âm thanh được gửi"}), 400
+
+        audio_file = request.files['file']
+        audio_bytes = audio_file.read()  # ✅ Đọc dữ liệu thành bytes
+
+        response = client.audio.transcriptions.create(
+            model="gpt-4o-mini-transcribe",
+            file=("audio.wav", audio_bytes)
+        )
+
+        return jsonify({"text": response.text})
+
+    except Exception as e:
+        print("❌ Lỗi /whisper:", e)
+        return jsonify({"error": str(e)}), 500
+
 
 # -------------------------
 # Chạy local (tùy chọn)
