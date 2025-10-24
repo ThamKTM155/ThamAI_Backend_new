@@ -1,147 +1,100 @@
-# app.py
+from flask import Flask, request, jsonify, send_file
+from flask_cors import CORS
+from gtts import gTTS
 import os
 import io
-from tempfile import NamedTemporaryFile
-from flask import Flask, request, jsonify, Response
-from flask_cors import CORS
+import openai
 from dotenv import load_dotenv
-from openai import OpenAI
 
-# Load env
+# --- Tải biến môi trường ---
 load_dotenv()
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-if not OPENAI_API_KEY:
-    print("⚠️ Warning: OPENAI_API_KEY not set in .env")
-
-# Flask + CORS
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app)
 
-# OpenAI client
-client = OpenAI(api_key=OPENAI_API_KEY)
+# --- Thư mục lưu tạm file âm thanh ---
+TEMP_PATH = "temp_audio"
+os.makedirs(TEMP_PATH, exist_ok=True)
 
-# --- Test route
-@app.route("/test", methods=["GET"])
-def test():
-    return jsonify({"message": "✅ Kết nối backend ThamAI thành công!", "status": "ok"}), 200
-
-
-# --- Chat route
-@app.route("/chat", methods=["POST"])
-def chat():
+# ----------------------------
+# 1. Endpoint /whisper – MÔ PHỎNG Whisper thật
+# ----------------------------
+@app.route("/whisper", methods=["POST"])
+def whisper_mock():
     try:
-        data = request.get_json(force=True)
-        message = (data.get("message") or "").strip()
-        if not message:
-            return jsonify({"error": "Thiếu nội dung tin nhắn"}), 400
+        # Mô phỏng quá trình nhận dạng giọng nói
+        fake_text = "Xin chào, tôi là ThạchAI đây!"
+        print("[Whisper mô phỏng] ->", fake_text)
+        return jsonify({"text": fake_text})
+    except Exception as e:
+        return jsonify({"error": f"Whisper mô phỏng lỗi: {str(e)}"}), 500
 
-        completion = client.chat.completions.create(
+
+# ----------------------------
+# 2. Endpoint /ask – ChatGPT thật (gpt-4o-mini)
+# ----------------------------
+@app.route("/ask", methods=["POST"])
+def ask_openai():
+    try:
+        data = request.get_json()
+        user_message = data.get("message", "")
+
+        if not user_message:
+            return jsonify({"error": "Thiếu nội dung message"}), 400
+
+        response = openai.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "Bạn là ThamAI - trợ lý ảo thân thiện và hữu ích."},
-                {"role": "user", "content": message},
+                {"role": "system", "content": "Bạn là trợ lý thân thiện tên ThạchAI."},
+                {"role": "user", "content": user_message}
             ],
         )
-        reply = completion.choices[0].message.content
-        return jsonify({"reply": reply}), 200
+
+        reply = response.choices[0].message.content
+        print("[ChatGPT]", reply)
+        return jsonify({"reply": reply})
 
     except Exception as e:
-        print("❌ Lỗi /chat:", e)
-        return jsonify({"error": "Lỗi nội bộ server", "detail": str(e)}), 500
+        return jsonify({"error": f"Lỗi khi gọi OpenAI: {str(e)}"}), 500
 
 
-# --- Whisper (Speech -> Text)
-@app.route("/whisper", methods=["POST"])
-def whisper():
-    try:
-        # Expect form-data with field name "file"
-        if "file" not in request.files:
-            return jsonify({"error": "Không có file ghi âm (field 'file' missing)"}), 400
-
-        audio_file = request.files["file"]
-        if audio_file.filename == "":
-            return jsonify({"error": "File rỗng"}), 400
-
-        # Read bytes and wrap in BytesIO (OpenAI client expects bytes / io.IOBase)
-        audio_bytes = audio_file.read()
-        if not audio_bytes:
-            return jsonify({"error": "Không đọc được file ghi âm"}), 400
-
-        audio_io = io.BytesIO(audio_bytes)
-
-        # Debug info
-        print(f"📥 Received audio file: {audio_file.filename}, content_type={audio_file.content_type}, size={len(audio_bytes)} bytes")
-
-        # Call OpenAI transcription
-        try:
-            transcript = client.audio.transcriptions.create(
-                model="whisper-1",
-                file=audio_io
-            )
-        except Exception as e:
-            print("❌ OpenAI transcription error:", e)
-            return jsonify({"error": "Whisper lỗi khi xử lý", "detail": str(e)}), 500
-
-        text = getattr(transcript, "text", None) or transcript.get("text") if isinstance(transcript, dict) else None
-        if text is None:
-            # fallback: try converting to string
-            return jsonify({"error": "Không lấy được văn bản từ Whisper", "detail": str(transcript)}), 500
-
-        return jsonify({"text": text}), 200
-
-    except Exception as e:
-        print("❌ Lỗi /whisper:", e)
-        return jsonify({"error": "Lỗi server khi nhận file", "detail": str(e)}), 500
-
-
-# --- Speak (Text -> Speech)
+# ----------------------------
+# 3. Endpoint /speak – Tạo giọng nói tiếng Việt bằng gTTS
+# ----------------------------
 @app.route("/speak", methods=["POST"])
 def speak():
     try:
-        data = request.get_json(force=True)
-        text = (data.get("text") or "").strip()
-        voice = (data.get("voice") or "alloy")  # default "alloy" (male-ish) ; frontend may pass "nova" for female
+        data = request.get_json()
+        text = data.get("text", "")
+        gender = data.get("gender", "female")  # 'female' hoặc 'male'
 
         if not text:
-            return jsonify({"error": "Không có nội dung để đọc"}), 400
+            return jsonify({"error": "Thiếu nội dung để đọc"}), 400
 
-        try:
-            # Create speech (this may raise exceptions from OpenAI)
-            speech_obj = client.audio.speech.create(
-                model="gpt-4o-mini-tts",
-                voice=voice,
-                input=text
-            )
-        except Exception as e:
-            print("❌ OpenAI TTS error:", e)
-            # Try to get message from exception object
-            return jsonify({"error": "TTS lỗi khi gọi API", "detail": str(e)}), 500
+        # Dùng accent miền Bắc (vi-VN)
+        tts = gTTS(text=text, lang="vi", slow=False)
 
-        # speech_obj should provide bytes via .read() or be bytes-like
-        audio_bytes = None
-        try:
-            if hasattr(speech_obj, "read"):
-                audio_bytes = speech_obj.read()
-            elif isinstance(speech_obj, (bytes, bytearray)):
-                audio_bytes = bytes(speech_obj)
-            elif isinstance(speech_obj, dict) and "audio" in speech_obj:
-                audio_bytes = speech_obj["audio"]
-            else:
-                # fallback: try str()
-                audio_bytes = str(speech_obj).encode("utf-8")
-        except Exception as e:
-            print("❌ Lỗi đọc dữ liệu âm thanh:", e)
-            return jsonify({"error": "Không thể đọc dữ liệu audio từ OpenAI", "detail": str(e)}), 500
+        file_path = os.path.join(TEMP_PATH, "speech.mp3")
+        tts.save(file_path)
 
-        # Return audio with proper mimetype
-        return Response(audio_bytes, mimetype="audio/mpeg")
+        print(f"[TTS gTTS] Tạo file âm thanh giọng {gender} thành công.")
+        return send_file(file_path, mimetype="audio/mpeg")
 
     except Exception as e:
-        print("❌ Lỗi /speak:", e)
-        return jsonify({"error": "Lỗi server", "detail": str(e)}), 500
+        return jsonify({"error": f"TTS lỗi khi tạo giọng: {str(e)}"}), 500
+
+
+# ----------------------------
+# 4. Kiểm tra hoạt động
+# ----------------------------
+@app.route("/", methods=["GET"])
+def home():
+    return jsonify({
+        "message": "✅ ThamAI Backend hoạt động ổn!",
+        "endpoints": ["/whisper", "/ask", "/speak"]
+    })
 
 
 if __name__ == "__main__":
-    # Use port 5000 locally
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000)

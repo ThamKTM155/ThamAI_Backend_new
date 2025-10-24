@@ -1,8 +1,6 @@
 flask
 flask-cors
 openai
-gunicorn
-pydub
-ffmpeg-python
-requests
+gtts
 python-dotenv
+gunicorn
