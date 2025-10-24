@@ -26,9 +26,9 @@ def chat():
         if not user_message:
             return jsonify({"error": "Thiếu nội dung message!"}), 400
 
-        # Gọi GPT-5 API (hoặc model tương thích)
+        # Gọi model ChatGPT thực (gpt-5 hoặc gpt-4o-mini)
         response = openai.chat.completions.create(
-            model="gpt-5",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "Bạn là trợ lý ảo ThạchAI, lịch sự, chuyên nghiệp và thân thiện."},
                 {"role": "user", "content": user_message}
@@ -40,10 +40,14 @@ def chat():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ✅ Giữ tương thích frontend cũ (đang gọi /chat)
 @app.route("/chat", methods=["POST"])
 def chat_compat():
-    """Giữ tương thích với frontend cũ"""
-    return chat_endpoint()
+    """Giữ tương thích với frontend cũ (/chat)"""
+    return chat()
+
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
