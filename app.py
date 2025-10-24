@@ -40,7 +40,10 @@ def chat():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
+@app.route("/chat", methods=["POST"])
+def chat_compat():
+    """Giữ tương thích với frontend cũ"""
+    return chat_endpoint()
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
