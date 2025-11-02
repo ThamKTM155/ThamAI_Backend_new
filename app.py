@@ -5,57 +5,43 @@ import os
 import tempfile
 
 app = Flask(__name__)
-CORS(app)  # Cho phép frontend (Vercel) truy cập
+CORS(app)
 
-@app.route('/')
-def home():
-    return jsonify({"message": "Backend ThamAI hoạt động tốt!"})
+# ✅ Kiểm tra kết nối backend
+@app.route("/")
+def index():
+    return jsonify({"status": "ok", "message": "ThamAI Ultra+ backend is running!"})
 
-# 🧠 Route CHAT
-@app.route('/chat', methods=['POST'])
+# ✅ Route chat (giả lập phản hồi)
+@app.route("/chat", methods=["POST"])
 def chat():
     data = request.get_json()
-    user_message = data.get('message', '').strip()
-    if not user_message:
-        return jsonify({"reply": "Xin vui lòng nhập nội dung."})
-    reply = f"ThamAI: Tôi đã nhận được - '{user_message}'"
-    return jsonify({"reply": reply})
+    message = data.get("message", "")
+    response = f"Tôi đã nhận được - '{message}'"
+    return jsonify({"reply": response})
 
-# 🎙️ Route WHISPER (giả lập nhận diện giọng nói)
-@app.route('/whisper', methods=['POST'])
-def whisper():
-    try:
-        if 'file' not in request.files:
-            return jsonify({"error": "Không có file ghi âm nào được gửi."}), 400
-
-        file = request.files['file']
-        if file.filename == '':
-            return jsonify({"error": "Tên file rỗng."}), 400
-
-        # Giả lập nhận diện: chỉ trả về chuỗi mô phỏng
-        return jsonify({"text": "Xin chào, đây là mô phỏng Whisper!"})
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# 🔊 Route SPEAK (phát giọng bằng gTTS)
-@app.route('/speak', methods=['POST'])
+# ✅ Route speak (Text → giọng nói)
+@app.route("/speak", methods=["POST"])
 def speak():
-    try:
-        data = request.get_json()
-        text = data.get('text', '')
-        if not text:
-            return jsonify({"error": "Không có nội dung để đọc."}), 400
+    data = request.get_json()
+    text = data.get("text", "")
+    lang = data.get("lang", "vi")
 
-        # Tạo file tạm
-        tts = gTTS(text, lang='vi')
-        temp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
-        tts.save(temp.name)
+    tts = gTTS(text=text, lang=lang)
+    tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
+    tts.save(tmpfile.name)
+    return send_file(tmpfile.name, mimetype="audio/mpeg", as_attachment=False)
 
-        return send_file(temp.name, mimetype="audio/mpeg")
+# ✅ Route whisper (Voice → Text, mô phỏng)
+@app.route("/whisper", methods=["POST"])
+def whisper():
+    if "file" not in request.files:
+        return jsonify({"error": "No audio file"}), 400
+    file = request.files["file"]
+    filename = file.filename
+    # mô phỏng xử lý
+    text_result = "Xin chào, tôi là mô phỏng Whisper!"
+    return jsonify({"text": text_result, "filename": filename})
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
