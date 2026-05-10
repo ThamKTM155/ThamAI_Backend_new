@@ -66,9 +66,19 @@ def chat():
         )
 
         result = response.json()
-
+        
+        print("OPENROUTER FULL RESPONSE:")
+        print(result)
+        
+        if "choices" not in result:
+        
+            return jsonify({
+                "reply": str(result)
+            })
+        
         reply = result["choices"][0]["message"]["content"]
-
+        
+        
         return jsonify({
             "reply": reply
         })
