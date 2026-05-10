@@ -1,24 +1,23 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from google import genai
+import requests
 import os
 
 app = Flask(__name__)
 CORS(app)
 
-# Gemini Client
-client = genai.Client(
-    api_key=os.getenv("GEMINI_API_KEY")
-)
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 @app.route("/")
 def home():
+
     return {
         "message": "Backend ThamAI hoạt động tốt!"
     }
 
 @app.route("/test")
 def test():
+
     return {
         "message": "ThamAI Backend đang online"
     }
@@ -38,18 +37,45 @@ def chat():
                 "reply": "Anh chưa nhập nội dung."
             })
 
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=message
+        response = requests.post(
+
+            url="https://openrouter.ai/api/v1/chat/completions",
+
+            headers={
+
+                "Authorization":
+                    f"Bearer {OPENROUTER_API_KEY}",
+
+                "Content-Type":
+                    "application/json"
+            },
+
+            json={
+
+                "model":
+                    "deepseek/deepseek-chat:free",
+
+                "messages": [
+
+                    {
+                        "role": "user",
+                        "content": message
+                    }
+                ]
+            }
         )
 
+        result = response.json()
+
+        reply = result["choices"][0]["message"]["content"]
+
         return jsonify({
-            "reply": response.text
+            "reply": reply
         })
 
     except Exception as e:
 
-        print("LỖI GEMINI:", str(e))
+        print("LỖI OPENROUTER:", str(e))
 
         return jsonify({
             "reply": f"Lỗi AI: {str(e)}"
