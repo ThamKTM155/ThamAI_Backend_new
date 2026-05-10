@@ -6,3 +6,4 @@ gunicorn
 gtts
 pydub
 google-generativeai
+gemini-1.5-pro
