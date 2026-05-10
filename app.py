@@ -1,12 +1,14 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import requests
+from google import genai
 import os
 
 app = Flask(__name__)
 CORS(app)
 
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+client = genai.Client(
+    api_key=os.getenv("GEMINI_API_KEY")
+)
 
 @app.route("/")
 def home():
@@ -37,55 +39,18 @@ def chat():
                 "reply": "Anh chưa nhập nội dung."
             })
 
-        response = requests.post(
-
-            url="https://openrouter.ai/api/v1/chat/completions",
-
-            headers={
-
-                "Authorization":
-                    f"Bearer {OPENROUTER_API_KEY}",
-
-                "Content-Type":
-                    "application/json"
-            },
-
-            json={
-            
-                "model":
-                    "mistralai/mistral-7b-instruct:free",
-            
-                "messages": [
-            
-                    {
-                        "role": "user",
-                        "content": message
-                    }
-                ]
-            }
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=message
         )
 
-        result = response.json()
-        
-        print("OPENROUTER FULL RESPONSE:")
-        print(result)
-        
-        if "choices" not in result:
-        
-            return jsonify({
-                "reply": str(result)
-            })
-        
-        reply = result["choices"][0]["message"]["content"]
-        
-        
         return jsonify({
-            "reply": reply
+            "reply": response.text
         })
 
     except Exception as e:
 
-        print("LỖI OPENROUTER:", str(e))
+        print("LỖI GEMINI:", str(e))
 
         return jsonify({
             "reply": f"Lỗi AI: {str(e)}"
