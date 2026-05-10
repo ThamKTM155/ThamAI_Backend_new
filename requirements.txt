@@ -1,9 +1,7 @@
 flask
 flask-cors
-openai>=1.0.0
 python-dotenv
 gunicorn
 gtts
 pydub
 google-generativeai>=0.8.0
-gemini-1.5-pro
