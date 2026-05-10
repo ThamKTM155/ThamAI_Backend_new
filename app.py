@@ -1,15 +1,16 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import google.generativeai as genai
+from google import genai
 import os
 
 app = Flask(__name__)
 CORS(app)
-# Gemini API
-genai.configure(
+
+# Gemini Client
+client = genai.Client(
     api_key=os.getenv("GEMINI_API_KEY")
 )
-model = genai.GenerativeModel("models/gemini-1.5-flash")
+
 @app.route("/")
 def home():
     return {
@@ -24,23 +25,30 @@ def test():
 
 @app.route("/chat", methods=["POST"])
 def chat():
+
     try:
+
         data = request.get_json()
 
         message = data.get("message", "")
 
         if not message:
+
             return jsonify({
                 "reply": "Anh chưa nhập nội dung."
             })
 
-        response = model.generate_content(message)
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=message
+        )
 
         return jsonify({
             "reply": response.text
         })
 
     except Exception as e:
+
         print("LỖI GEMINI:", str(e))
 
         return jsonify({
@@ -48,4 +56,8 @@ def chat():
         })
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+
+    app.run(
+        host="0.0.0.0",
+        port=5000
+    )
