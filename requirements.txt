@@ -4,4 +4,4 @@ python-dotenv
 gunicorn
 gtts
 pydub
-google-genai
+requests
