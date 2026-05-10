@@ -1,8 +1,7 @@
 flask
 flask-cors
-openai
+openai>=1.0.0
 python-dotenv
 gunicorn
 gtts
 pydub
-openai>=1.0.0
