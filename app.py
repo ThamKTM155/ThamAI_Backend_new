@@ -38,10 +38,11 @@ def chat():
                 "reply": "Anh chưa nhập nội dung."
             })
 
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=message
-    )
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=message
+        )
+
         return jsonify({
             "reply": response.text
         })
