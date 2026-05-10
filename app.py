@@ -51,12 +51,12 @@ def chat():
             },
 
             json={
-
+            
                 "model":
-                    "deepseek/deepseek-chat:free",
-
+                    "mistralai/mistral-7b-instruct:free",
+            
                 "messages": [
-
+            
                     {
                         "role": "user",
                         "content": message
