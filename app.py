@@ -6,6 +6,7 @@ import os
 app = Flask(__name__)
 CORS(app)
 
+# Gemini Client
 client = genai.Client(
     api_key=os.getenv("GEMINI_API_KEY")
 )
