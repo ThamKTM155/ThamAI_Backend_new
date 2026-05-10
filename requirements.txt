@@ -1,7 +1,5 @@
 flask
 flask-cors
-python-dotenv
 gunicorn
-gtts
-pydub
-requests
+python-dotenv
+google-genai
