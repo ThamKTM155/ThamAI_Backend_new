@@ -10,7 +10,7 @@ CORS(app)
 genai.configure(
     api_key=os.getenv("GEMINI_API_KEY")
 )
-genai.GenerativeModel("models/gemini-1.5-flash")
+model = genai.GenerativeModel("models/gemini-1.5-flash")
 @app.route("/")
 def home():
     return {
