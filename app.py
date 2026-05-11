@@ -1,27 +1,23 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from google import genai
+import requests
 import os
+
 app = Flask(__name__)
 CORS(app)
 
-# Gemini Client
-client = genai.Client(
-    api_key=os.getenv("GEMINI_API_KEY")
-)
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 @app.route("/")
 def home():
-
     return {
-        "message": "Backend ThamAI hoạt động tốt!"
+        "message": "ThamAI Backend hoạt động tốt!"
     }
 
 @app.route("/test")
 def test():
-
     return {
-        "message": "ThamAI Backend đang online"
+        "message": "Backend đang online"
     }
 
 @app.route("/chat", methods=["POST"])
@@ -39,18 +35,47 @@ def chat():
                 "reply": "Anh chưa nhập nội dung."
             })
 
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=message
+        response = requests.post(
+
+            "https://openrouter.ai/api/v1/chat/completions",
+
+            headers={
+
+                "Authorization":
+                f"Bearer {OPENROUTER_API_KEY}",
+
+                "Content-Type":
+                "application/json"
+            },
+
+            json={
+
+                "model":
+                "openai/gpt-3.5-turbo",
+
+                "messages": [
+
+                    {
+                        "role": "user",
+                        "content": message
+                    }
+                ]
+            }
         )
 
+        result = response.json()
+
+        print(result)
+
+        reply = result["choices"][0]["message"]["content"]
+
         return jsonify({
-            "reply": response.text
+            "reply": reply
         })
 
     except Exception as e:
 
-        print("LỖI GEMINI:", str(e))
+        print("LỖI AI:", str(e))
 
         return jsonify({
             "reply": f"Lỗi AI: {str(e)}"
@@ -58,9 +83,7 @@ def chat():
 
 if __name__ == "__main__":
 
-    port = int(os.environ.get("PORT", 5000))
-
     app.run(
         host="0.0.0.0",
-        port=port
+        port=5000
     )
