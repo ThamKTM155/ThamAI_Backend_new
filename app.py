@@ -63,17 +63,17 @@ def chat():
             }
         )
 
-    result = response.json()
-    
-    print(result)
-    
-    if "choices" not in result:
-    
-        return jsonify({
-            "reply": f"Lỗi OpenRouter: {result}"
-        })
-    
-    reply = result["choices"][0]["message"]["content"]
+        result = response.json()
+        
+        print(result)
+        
+        if "choices" not in result:
+        
+            return jsonify({
+                "reply": str(result)
+            })
+        
+        reply = result["choices"][0]["message"]["content"]
 
         return jsonify({
             "reply": reply
