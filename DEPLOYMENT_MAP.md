@@ -60,7 +60,51 @@ POST /chat
 
 GET /test
 
+#######################################################################
+```md id="cm4"
+# Production Stable V1
+
+Frontend + Backend + OpenRouter working stable.
+
 ---
+
+# Frontend Production
+
+Tên:
+ThamAI_Production_Frontend
+
+Project ID:
+prj_ApHPYFIw5hEDCB0IoSSo5JfxZJHw
+
+Deploy:
+Vercel
+
+---
+
+# Backend Production
+
+Tên:
+thamai-backend-new
+
+Deploy:
+Render
+
+---
+
+# AI Provider
+
+OpenRouter
+
+---
+
+# Trạng thái
+
+- Frontend hoạt động
+- Backend hoạt động
+- AI phản hồi thật
+- Production ổn định
+```
+
 
 # Trạng thái hiện tại
 
