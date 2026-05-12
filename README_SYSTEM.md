@@ -2,7 +2,7 @@
 
 Hệ sinh thái AI do Hoàng Ngọc Thắm phát triển.
 
----
+---################
 
 # Thành phần hệ thống
 
@@ -13,7 +13,7 @@ Trợ lý AI tiếng Việt hỗ trợ:
 - AutoYouTube
 - quản lý nội dung AI
 
----
+---#############
 
 ## 2. AutoYouTube
 Engine tự động:
