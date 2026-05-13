@@ -53,7 +53,7 @@ def health():
 # CHAT
 # =========================
 
-@app.route("/chat", methods=["GET", "POST"])
+@app.route("/chat", methods=["POST"])
 def chat():
 
     try:
@@ -61,11 +61,14 @@ def chat():
         # Lấy dữ liệu frontend gửi lên
         data = request.get_json(silent=True) or {}
 
-        # Nếu không có message thì test mặc định
         message = data.get("message", "").strip()
 
+        # Nếu message rỗng
         if not message:
-            message = "Xin chào ThamAI"
+
+            return jsonify({
+                "reply": "Anh chưa nhập nội dung."
+            })
 
         # Kiểm tra API KEY
         if not OPENROUTER_API_KEY:
@@ -81,7 +84,7 @@ def chat():
                 {
                     "role": "system",
                     "content":
-                    "Bạn là ThamAI, trợ lý AI thân thiện và thông minh."
+                    "Bạn là ThamAI, trợ lý AI thân thiện, thông minh và hỗ trợ AutoYouTube."
                 },
                 {
                     "role": "user",
@@ -95,6 +98,7 @@ def chat():
             "Authorization": f"Bearer {OPENROUTER_API_KEY.strip()}",
             "Content-Type": "application/json"
         }
+
         # Gửi request OpenRouter
         response = requests.post(
             url="https://openrouter.ai/api/v1/chat/completions",
@@ -105,6 +109,7 @@ def chat():
 
         # Response JSON
         result = response.json()
+
         # Nếu lỗi
         if "choices" not in result:
 

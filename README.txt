@@ -39,3 +39,29 @@ Là thành công ✅
 
 ## Gợi ý kiểm thử
 ### 1. Chat:
+######################################################################################
+NGÀY 12-5-2026
+######################################################################################
+```md id="cb9"
+# ThamAI Backend New
+
+Backend AI production của ThamAI.
+
+## Stack
+- Flask
+- Render
+- OpenRouter API
+
+## Environment Variables
+
+OPENAI_API_KEY
+
+## API Route
+
+POST /chat
+
+GET /test
+
+## Trạng thái
+Production Stable V1
+```
