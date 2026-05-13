@@ -134,7 +134,7 @@ def chat():
 # =========================
 
 if __name__ == "__main__":
-
+logger.info("THAMAI SERVER STARTED")
     app.run(
         host="0.0.0.0",
         port=5000
