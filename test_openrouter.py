@@ -1,7 +1,8 @@
 import requests
+import os
+from dotenv import load_dotenv
 
-API_KEY = "YOUR_API_KEY"
-print(repr(API_KEY))
+load_dotenv()
 
 headers = {
     "Authorization": f"Bearer {API_KEY}",
