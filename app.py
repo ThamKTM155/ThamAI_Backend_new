@@ -295,6 +295,75 @@ def chat():
         })
 
 # =========================
+# BUILD-64I.02I : AI GATEWAY ENDPOINT
+# =========================
+
+@app.route('/ai', methods=['POST'])
+def ai_gateway():
+
+    try:
+
+        data = request.get_json(silent=True) or {}
+        message = data.get('message', '').strip()
+
+        if not message:
+            return jsonify({
+                'reply': 'Anh chưa nhập nội dung.'
+            }), 400
+
+        if not OPENROUTER_API_KEY:
+            return jsonify({
+                'reply': 'Thiếu OPENAI_API_KEY trong file .env'
+            }), 500
+
+        payload = {
+            'model': 'openai/gpt-3.5-turbo',
+            'messages': [
+                {
+                    'role': 'system',
+                    'content': 'Bạn là ThamAI. Trả lời tự nhiên, chính xác và không tự bịa thông tin.'
+                },
+                {
+                    'role': 'user',
+                    'content': message
+                }
+            ]
+        }
+
+        headers_data = {
+            'Authorization': f'Bearer {OPENROUTER_API_KEY.strip()}',
+            'Content-Type': 'application/json'
+        }
+
+        response = requests.post(
+            url='https://openrouter.ai/api/v1/chat/completions',
+            headers=headers_data,
+            json=payload,
+            timeout=60
+        )
+
+        result = response.json()
+
+        if 'choices' not in result:
+            return jsonify({
+                'reply': 'OpenRouter lỗi:\n' + str(result)
+            }), 502
+
+        reply = result['choices'][0]['message']['content']
+
+        return jsonify({
+            'reply': reply
+        })
+
+    except Exception as e:
+
+        print('LỖI AI GATEWAY:', str(e))
+
+        return jsonify({
+            'reply': f'Lỗi AI Gateway: {str(e)}'
+        }), 500
+
+# =========================
 # RUN LOCAL
 # =========================
 
