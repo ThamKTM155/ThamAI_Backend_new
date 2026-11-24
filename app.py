@@ -131,16 +131,10 @@ def chat():
             pass
 
         # ===== Hết BUILD-40A-05 =====
-        # ===== BUILD-40A =====
-        identity_reply = answer_identity(message)
+        # ===== BUILD-40A DISABLED: FE-24I =====
+        # Direct call answer_identity(message) disabled.
+        # Identity API BUILD-40A-05 remains unchanged.
 
-        if identity_reply is not None:
-
-            return jsonify({
-                "reply": identity_reply
-            })
-
-        # ===== Hết BUILD-40A =====
         # ===== BUILD-39D =====
 
         cache_reply = get_cache(message)
